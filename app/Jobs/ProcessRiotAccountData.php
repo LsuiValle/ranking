@@ -56,17 +56,19 @@ class ProcessRiotAccountData implements ShouldQueue
                         continue;
                     }
                     
-                    if($entry['queueType'] == 'RANKED_SOLO_5x5'){
-                        RiotAccount::where('summonerid', $summonerId)->update([
+                    $updateData = [];
+                    if ($entry['queueType'] == 'RANKED_SOLO_5x5') {
+                        $updateData = [
                             'division' => $entry['tier'] ?? '',
                             'rango' => $entry['rank'] ?? '',
                             'wins' => $entry['wins'] ?? 0,
                             'defeat' => $entry['losses'] ?? 0,
                             'points' => $entry['leaguePoints'] ?? 0,
                             'updated_at' => now(),
-                        ]);
-                        info("Se actualizo correctamente");
+                        ];
                     }else{
+                        // Reset ranking data for non-solo queue types to default values
+                        info("Resetting ranking data for non-solo queue type for summonerId: $summonerId.");
                         RiotAccount::where('summonerid', $summonerId)->update([
                             'division' => '',
                             'rango' => '',
@@ -76,6 +78,8 @@ class ProcessRiotAccountData implements ShouldQueue
                             'updated_at' => now(),
                         ]);
                     }
+                    }
+                    RiotAccount::where('summoner_id', $summonerId)->update($updateData);
                 
                 }
             }
