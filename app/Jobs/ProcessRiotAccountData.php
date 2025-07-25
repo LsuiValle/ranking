@@ -66,7 +66,7 @@ class ProcessRiotAccountData implements ShouldQueue
                             'points' => $entry['leaguePoints'] ?? 0,
                             'updated_at' => now(),
                         ];
-                    }else{
+                    } else {
                         // Reset ranking data for non-solo queue types to default values
                         info("Resetting ranking data for non-solo queue type for summonerId: $summonerId.");
                         RiotAccount::where('summonerid', $summonerId)->update([
@@ -77,10 +77,9 @@ class ProcessRiotAccountData implements ShouldQueue
                             'points' => 0,
                             'updated_at' => now(),
                         ]);
-                    }
+                        continue;
                     }
                     RiotAccount::where('summoner_id', $summonerId)->update($updateData);
-                
                 }
             }
         }
