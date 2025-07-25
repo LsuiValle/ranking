@@ -40,9 +40,6 @@ class UpdateRiotStats implements ShouldQueue
 
             $data = $response->json();
             $point = RiotAccount::where('summonerid', $summonerId)->first();
-            info("***********************DATASTART***********************");
-            info($data);
-            info("***********************DATAEND***********************");
 
             if ($point && !empty($data)) {
                 if($data['profileIconId']){
@@ -50,7 +47,6 @@ class UpdateRiotStats implements ShouldQueue
                         'icon_id' => $data['profileIconId'] ?? '',
                         'updated_at' => now(),
                     ]);
-                    info("Se actualizo correctamente");
                 }
             }
         }

@@ -55,6 +55,7 @@ class ProcessRiotAccountData implements ShouldQueue
                         info("No se realizaron cambios para el summonerId: $summonerId.");
                         continue;
                     }
+                    
                     if($entry['queueType'] == 'RANKED_SOLO_5x5'){
                         RiotAccount::where('summonerid', $summonerId)->update([
                             'division' => $entry['tier'] ?? '',
@@ -65,6 +66,15 @@ class ProcessRiotAccountData implements ShouldQueue
                             'updated_at' => now(),
                         ]);
                         info("Se actualizo correctamente");
+                    }else{
+                        RiotAccount::where('summonerid', $summonerId)->update([
+                            'division' => '',
+                            'rango' => '',
+                            'wins' => 0,
+                            'defeat' => 0,
+                            'points' => 0,
+                            'updated_at' => now(),
+                        ]);
                     }
                 
                 }
