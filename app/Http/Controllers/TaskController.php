@@ -14,6 +14,12 @@ use Illuminate\Support\Facades\Cache;
 class TaskController extends Controller
 {
     public $timestamps = false;
+
+    public function __construct()
+    {
+        $this->middleware('auth'); // Require authentication for all methods
+        $this->middleware('throttle:10,1')->only('updateAll'); // Rate limit updateAll to 10 requests per minute
+    }
     /**
      * Display a listing of the resource.
      *
@@ -21,7 +27,7 @@ class TaskController extends Controller
      */
     public function index(Request $request)
     {
-        $rankings = [
+        $divisionOrder = [
             'IRON' => 1,
             'BRONZE' => 2,
             'SILVER' => 3,
@@ -32,6 +38,15 @@ class TaskController extends Controller
             'MASTER' => 8,
             'GRANDMASTER' => 9,
             'CHALLENGER' => 10,
+        ];
+
+        $rangoOrder = [
+            'I' => 4,
+            'II' => 3,
+            'III' => 2,
+            'IV' => 1,
+            'V' => 0,
+            'No ha Jugado' => -1,
         ];
 
         $query = RiotAccount::query();
@@ -46,25 +61,38 @@ class TaskController extends Controller
         }
 
         // Ordenar directamente en la base de datos
-        $orderByRank = implode(' ', array_map(function ($rank, $value) {
-            return "WHEN '$rank' THEN $value";
-        }, array_keys($rankings), $rankings));
+        $divisionCase = implode(' ', array_map(
+        fn($division, $value) => "WHEN '$division' THEN $value",
+        array_keys($divisionOrder),
+        $divisionOrder
+        ));
+
+        $rangoCase = implode(' ', array_map(
+            fn($rango, $value) => "WHEN '$rango' THEN $value",
+            array_keys($rangoOrder),
+            $rangoOrder
+        ));
 
         $tasks = $query->where('activo', 1)
             ->orderByRaw("
                 CASE division
-                    $orderByRank
+                    $divisionCase
                     ELSE 0
-                END DESC,
-                points DESC
+                END DESC
             ")
+            ->orderByRaw("
+                CASE rango
+                    $rangoCase
+                    ELSE -1
+                END DESC
+            ")
+            ->orderByDesc('points')
             ->get();
 
         if ($request->ajax()) {
             return response()->json(['tasks' => $tasks]);
         }
 
-        // Cargar la vista normal
         return view('task.index', compact('tasks'));
     }
 
@@ -133,6 +161,7 @@ class TaskController extends Controller
             [
                 'game_name' => $data['gameName'],
                 'tag_line' => $data['tagLine'],
+                'puuid' => $data['puuid'],
                 'division' => "No ha Jugado", // Actualmente valores nulos
                 'rango' => "No ha Jugado", // Actualmente valores nulos
                 'activo' => 1, // Actualmente valor 1
@@ -169,33 +198,115 @@ class TaskController extends Controller
         $existingAccounts = RiotAccount::whereIn('id', $id)->get()->keyBy('summonerid');
 
         return redirect('/');
-    }
-
-    public function updateAll()
-    {
-        $accounts = RiotAccount::where('activo', 1)->get();
-
         foreach ($accounts as $account) {
-            // Aquí deberías poner la lógica para actualizar cada invocador,
-            // por ejemplo, llamando a la API de Riot y actualizando los datos.
-            // Puedes reutilizar parte de la lógica de tu método store().
-            // Ejemplo básico:
-            $token = config('app.token_lol');
-            $url = "https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{$account->game_name}/{$account->tag_line}";
-            $response = \Illuminate\Support\Facades\Http::withHeaders([
-                'X-Riot-Token' => $token,
-            ])->get($url);
-
-            if ($response->ok()) {
-                $data = $response->json();
-                $account->update([
-                    'game_name' => $data['gameName'] ?? $account->game_name,
-                    'tag_line' => $data['tagLine'] ?? $account->tag_line,
-                    // Actualiza otros campos si es necesario
-                ]);
+            // Dispatch a job for each account to update asynchronously
+            ProcessRiotAccountData::dispatch($account);
+        }
+            // Here you should put the logic to update each summoner,
+            // for example, by calling the Riot API and updating the data.
+            // You can reuse part of the logic from your store() method.
+            // Example using the RiotApiService:
+        // Example: Improved error handling for bulk operation
+        $failedAccounts = [];
+        foreach ($accounts as $account) {
+            try {
+                // Dispatch a job for each account to update asynchronously
+                ProcessRiotAccountData::dispatch($account);
+            } catch (\Exception $e) {
+                \Log::error("Failed to dispatch job for account ID {$account->id}: " . $e->getMessage());
+                $failedAccounts[] = $account->id;
             }
         }
 
+        if (!empty($failedAccounts)) {
+            return response()->json([
+                'success' => false,
+                'failed_accounts' => $failedAccounts,
+                'message' => 'Some accounts failed to update. Check logs for details.'
+            ], 207); // 207 Multi-Status
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    public function updateAll(Request $request)
+    {
+        $ids = $request->input('ids', []);
+        \Log::info('IDs recibidos para actualizar:', $ids);
+
+        if (empty($ids)) {
+            \Log::warning('No se recibieron IDs para actualizar.');
+            return response()->json(['success' => false, 'message' => 'No hay invocadores para actualizar.'], 400);
+        }
+
+        $accounts = RiotAccount::whereIn('id', $ids)->get();
+        $token = config('app.token_lol');
+        $failedAccounts = [];
+
+        foreach ($accounts as $account) {
+            $puuid = $account->puuid;
+            if (!$puuid) {
+                // Si no tienes el puuid, consíguelo primero
+                $urlPuuid = "https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{$account->game_name}/{$account->tag_line}";
+                $responsePuuid = \Illuminate\Support\Facades\Http::withHeaders([
+                    'X-Riot-Token' => $token,
+                ])->get($urlPuuid);
+
+                if ($responsePuuid->ok()) {
+                    $dataPuuid = $responsePuuid->json();
+                    $puuid = $dataPuuid['puuid'] ?? null;
+                    $account->update(['puuid' => $puuid]);
+                }
+            }
+
+            if ($puuid) {
+                $url = "https://la2.api.riotgames.com/lol/league/v4/entries/by-puuid/{$puuid}";
+                $response = \Illuminate\Support\Facades\Http::withHeaders([
+                    'X-Riot-Token' => $token,
+                ])->get($url);
+
+                \Log::info("Consultando Riot API para: {$account->game_name}#{$account->tag_line} - URL: $url");
+
+                if ($response->ok()) {
+                    $data = $response->json();
+                    // Solo nos importa RANKED_SOLO_5x5
+                    $soloQ = collect($data)->firstWhere('queueType', 'RANKED_SOLO_5x5');
+                    if ($soloQ) {
+                        $account->update([
+                            'division' => $soloQ['tier'] ?? 'No ha Jugado',
+                            'rango' => $soloQ['rank'] ?? 'No ha Jugado',
+                            'points' => $soloQ['leaguePoints'] ?? 0,
+                            'updated_at' => now(),
+                        ]);
+                    } else {
+                        // Si no tiene soloQ, deja en "No ha Jugado"
+                        $account->update([
+                            'division' => 'No ha Jugado',
+                            'rango' => 'No ha Jugado',
+                            'points' => 0,
+                            'updated_at' => now(),
+                        ]);
+                    }
+                } else {
+                    $failedAccounts[] = $account->id;
+                    \Log::warning("Fallo al actualizar: {$account->id}");
+                }
+            } else {
+                $failedAccounts[] = $account->id;
+                \Log::warning("No se pudo obtener el puuid para: {$account->id}");
+            }
+        }
+
+        if (!empty($failedAccounts)) {
+            \Log::warning('Cuentas que fallaron:', $failedAccounts);
+            return response()->json([
+                'success' => false,
+                'failed_accounts' => $failedAccounts,
+                'message' => 'Algunas cuentas no se pudieron actualizar.'
+            ], 207);
+        }
+
+        \Log::info('Actualización completada correctamente.');
         return response()->json(['success' => true]);
     }
 }

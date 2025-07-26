@@ -148,13 +148,44 @@
                     </div>
                 </form>
                 <!-- Agrega este botón arriba de la tabla/lista de invocadores -->
-                <button id="updateAllBtn" class="btn btn-primary">Actualizar Invocadores</button>
+                <button id="updateAllBtn" class="btn btn-danger">Actualizar Invocadores</button>
+                <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+                <script>
+                      $('#updateAllBtn').click(function() {
+                          var btn = $(this);
+                          btn.prop('disabled', true).text('Actualizando...');
+                          var ids = [];
+                          $('tbody tr[data-id]').each(function() {
+                              ids.push($(this).data('id'));
+                          });
+                          $.ajax({
+                              url: '{{ route("tasks.updateAll") }}',
+                              type: 'POST',
+                              data: {
+                                  _token: '{{ csrf_token() }}',
+                                  ids: ids
+                              },
+                              success: function(response) {
+                                  showToast('Invocadores actualizados correctamente', true);
+                                  setTimeout(function() {
+                                      location.reload();
+                                  }, 1500);
+                              },
+                              error: function() {
+                                  showToast('Error al actualizar los invocadores', false);
+                              },
+                              complete: function() {
+                                  btn.prop('disabled', false).text('Actualizar Invocadores');
+                              }
+                          });
+                      });
+                </script>
                 <div
                     class="table-responsive-sm">
                     <table
                         class="table table-primary">
                         <thead>
-                            <tr>
+                          <tr>
                                 <th scope="col">Position</th>
                                 <th scope="col">Nombre</th>
                                 <th scope="col" style="width: 10%;">Tag</th>
@@ -166,7 +197,7 @@
                         <tbody>
                           @foreach($tasks as $task)
                               @if($task->activo == 1)
-                                  <tr class="{{ $loop->first ? 'table-warning' : '' }} {{ strtolower($task->division) }}">
+                                  <tr data-id="{{ $task->id }}" class="{{ $loop->first ? 'table-warning' : '' }} {{ strtolower($task->division) }}">
                                       <td>#{{ $loop->iteration }}</td>
                                       <td>
                                           <a href="{{ route('historial.storeSession', ['id_user' => $task->id]) }}" style="color: black; text-decoration: none; cursor: pointer;">
@@ -201,6 +232,19 @@
         <footer>
             <!-- place footer here -->
         </footer>
+
+        <!-- Toast container -->
+        <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 11">
+          <div id="toastFeedback" class="toast align-items-center text-bg-primary border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+              <div class="toast-body" id="toastFeedbackBody">
+                <!-- Feedback message will appear here -->
+              </div>
+              <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+          </div>
+        </div>
+
         <!-- Bootstrap JavaScript Libraries -->
         <script
             src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"
@@ -262,23 +306,41 @@
         </script>        
         <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
         <script>
+        function showToast(message, isSuccess = true) {
+            const toastEl = document.getElementById('toastFeedback');
+            const toastBody = document.getElementById('toastFeedbackBody');
+            toastBody.textContent = message;
+            toastEl.classList.remove('text-bg-primary', 'text-bg-danger');
+            toastEl.classList.add(isSuccess ? 'text-bg-primary' : 'text-bg-danger');
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+
         $('#updateAllBtn').click(function() {
-            $(this).prop('disabled', true).text('Actualizando...');
+            var btn = $(this);
+            btn.prop('disabled', true).text('Actualizando...');
+            var ids = [];
+            $('tbody tr[data-id]').each(function() {
+                ids.push($(this).data('id'));
+            });
             $.ajax({
                 url: '{{ route("tasks.updateAll") }}',
                 type: 'POST',
                 data: {
-                    _token: '{{ csrf_token() }}'
+                    _token: '{{ csrf_token() }}',
+                    ids: ids
                 },
                 success: function(response) {
-                    alert('Invocadores actualizados correctamente');
-                    location.reload();
+                    showToast('Invocadores actualizados correctamente', true);
+                    setTimeout(function() {
+                        location.reload();
+                    }, 1500);
                 },
                 error: function() {
-                    alert('Error al actualizar los invocadores');
+                    showToast('Error al actualizar los invocadores', false);
                 },
                 complete: function() {
-                    $('#updateAllBtn').prop('disabled', false).text('Actualizar Invocadores');
+                    btn.prop('disabled', false).text('Actualizar Invocadores');
                 }
             });
         });

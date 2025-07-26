@@ -20,6 +20,9 @@ Route::get('/', function () {
     return view('task.index');
 });
 */
+Route::get('/login', function () {
+    return view('auth.login');
+})->name('tasks.index');
 
 Route::match(['GET', 'POST'], '/', [TaskController::class, 'index'])->name('tasks.index');
 Route::post('/tasks/update-all', [TaskController::class, 'updateAll'])->name('tasks.updateAll');
@@ -35,3 +38,6 @@ Route::get('/store-session/{id_user}', function ($id_user) {
 })->name('historial.storeSession');
 
 Route::get('/historial', [HistorialController::class, 'index'])->name('historial.index');
+Auth::routes();
+
+Route::get('/home', [App\Http\Controllers\HomeController::class, 'index'])->name('home');
