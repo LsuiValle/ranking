@@ -22,7 +22,7 @@ Route::get('/', function () {
 */
 
 Route::match(['GET', 'POST'], '/', [TaskController::class, 'index'])->name('tasks.index');
-
+Route::post('/tasks/update-all', [TaskController::class, 'updateAll'])->name('tasks.updateAll');
 Route::post('/', [TaskController::class,'store']);
 
 Route::delete('/{id}',[TaskController::class,'destroy'])->name('task.destroy');

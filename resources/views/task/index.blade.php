@@ -147,6 +147,8 @@
                         <a href="{{ url('/') }}" class="btn btn-secondary">Limpiar</a>
                     </div>
                 </form>
+                <!-- Agrega este botón arriba de la tabla/lista de invocadores -->
+                <button id="updateAllBtn" class="btn btn-primary">Actualizar Invocadores</button>
                 <div
                     class="table-responsive-sm">
                     <table
@@ -258,5 +260,28 @@
                 .catch(error => console.error('Error al realizar la búsqueda:', error));
           });
         </script>        
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script>
+        $('#updateAllBtn').click(function() {
+            $(this).prop('disabled', true).text('Actualizando...');
+            $.ajax({
+                url: '{{ route("tasks.updateAll") }}',
+                type: 'POST',
+                data: {
+                    _token: '{{ csrf_token() }}'
+                },
+                success: function(response) {
+                    alert('Invocadores actualizados correctamente');
+                    location.reload();
+                },
+                error: function() {
+                    alert('Error al actualizar los invocadores');
+                },
+                complete: function() {
+                    $('#updateAllBtn').prop('disabled', false).text('Actualizar Invocadores');
+                }
+            });
+        });
+        </script>
     </body>
 </html>

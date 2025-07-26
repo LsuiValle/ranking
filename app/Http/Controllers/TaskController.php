@@ -170,4 +170,32 @@ class TaskController extends Controller
 
         return redirect('/');
     }
+
+    public function updateAll()
+    {
+        $accounts = RiotAccount::where('activo', 1)->get();
+
+        foreach ($accounts as $account) {
+            // Aquí deberías poner la lógica para actualizar cada invocador,
+            // por ejemplo, llamando a la API de Riot y actualizando los datos.
+            // Puedes reutilizar parte de la lógica de tu método store().
+            // Ejemplo básico:
+            $token = config('app.token_lol');
+            $url = "https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{$account->game_name}/{$account->tag_line}";
+            $response = \Illuminate\Support\Facades\Http::withHeaders([
+                'X-Riot-Token' => $token,
+            ])->get($url);
+
+            if ($response->ok()) {
+                $data = $response->json();
+                $account->update([
+                    'game_name' => $data['gameName'] ?? $account->game_name,
+                    'tag_line' => $data['tagLine'] ?? $account->tag_line,
+                    // Actualiza otros campos si es necesario
+                ]);
+            }
+        }
+
+        return response()->json(['success' => true]);
+    }
 }
